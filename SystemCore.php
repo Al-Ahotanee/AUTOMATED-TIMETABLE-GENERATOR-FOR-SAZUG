@@ -148,7 +148,12 @@ class SystemCore {
     }
 
     public function addCourse($code, $title, $duration, $is_practical, $students, $program_ids, $level_id, $lecturer_id) {
-        $this->db->beginTransaction();
+        // Smart check: Only start a new transaction if one isn't already running from the CSV importer
+        $inTransaction = $this->db->inTransaction();
+        if (!$inTransaction) {
+            $this->db->beginTransaction();
+        }
+        
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO courses (code, title, duration_hours, is_practical, students_count, level_id, lecturer_id) 
@@ -166,10 +171,15 @@ class SystemCore {
             foreach ($program_ids as $pid) {
                 if ($pid) $stmt_cp->execute([$course_id, $pid]);
             }
-            $this->db->commit();
+            
+            if (!$inTransaction) {
+                $this->db->commit();
+            }
             return $course_id;
         } catch (\Exception $e) {
-            $this->db->rollBack();
+            if (!$inTransaction) {
+                $this->db->rollBack();
+            }
             throw $e;
         }
     }
