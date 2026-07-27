@@ -31,11 +31,13 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
 
     <style>
         :root {
-            --primary: #059669; /* Emerald 600 */
-            --primary-hover: #047857; /* Emerald 700 */
-            --primary-light: #d1fae5; /* Emerald 100 */
+            --primary: #1e3a8a; /* Deep Professional Blue */
+            --primary-hover: #172554; /* Darker Blue */
+            --primary-light: #eff6ff; /* Very Light Blue */
+            --accent: #d946ef; /* Vibrant Magenta */
+            --accent-hover: #c026d3; /* Darker Magenta */
             --bg-body: #f8fafc;
-            --text-main: #1e293b;
+            --text-main: #0f172a;
             --text-muted: #64748b;
         }
 
@@ -104,18 +106,18 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
         .btn-outline-custom:hover {
             border-color: var(--primary);
             color: var(--primary);
-            background-color: #f8fafc;
+            background-color: var(--primary-light);
         }
 
         /* Hero Section */
         .hero-section {
-            background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+            background: linear-gradient(135deg, #ffffff 0%, var(--primary-light) 100%);
             padding: 5rem 0;
             border-bottom: 1px solid #e2e8f0;
         }
         .hero-badge {
-            background: var(--primary-light);
-            color: var(--primary-hover);
+            background: rgba(217, 70, 239, 0.1);
+            color: var(--accent-hover);
             font-size: 0.85rem;
             font-weight: 600;
             padding: 0.4rem 1rem;
@@ -123,6 +125,7 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
             display: inline-flex;
             align-items: center;
             gap: 6px;
+            border: 1px solid rgba(217, 70, 239, 0.2);
         }
         .hero-title {
             font-size: clamp(2.5rem, 5vw, 3.5rem);
@@ -254,7 +257,7 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
             </div>
             
             <h1 class="hero-title mb-4">
-                Automated Academic Scheduling for the <span style="color: var(--primary);">Department of Mathematical Sciences</span>
+                Automated Academic Scheduling for the <span style="color: var(--accent);">Department of Mathematical Sciences</span>
             </h1>
             
             <p class="lead text-muted mb-5 mx-auto" style="max-width: 720px; font-size: 1.15rem;">
@@ -313,7 +316,7 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
                 </div>
                 <div class="col-md-4">
                     <div class="feature-card p-4 h-100 text-center">
-                        <div class="d-inline-flex p-3 rounded-circle mb-3" style="background: var(--primary-light); color: var(--primary);">
+                        <div class="d-inline-flex p-3 rounded-circle mb-3" style="background: rgba(217, 70, 239, 0.1); color: var(--accent);">
                             <i data-lucide="laptop" style="width: 2rem; height: 2rem;"></i>
                         </div>
                         <h5 class="fw-bold">Hardware Matching</h5>
@@ -339,7 +342,7 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
             <p class="mx-auto mb-4" style="max-width: 600px; color: var(--primary-light);">
                 Authorized personnel can log in to manage courses, update room capacities, and execute the scheduling algorithm.
             </p>
-            <a href="login.php" class="btn btn-light btn-lg text-success fw-bold px-4" style="border-radius: 8px;">
+            <a href="login.php" class="btn btn-light btn-lg fw-bold px-4" style="border-radius: 8px; color: var(--primary);">
                 Access Portal <i data-lucide="arrow-right" class="ms-2" style="width: 1.2rem; height: 1.2rem; display:inline-block; vertical-align: middle;"></i>
             </a>
         </div>
@@ -486,13 +489,13 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
 
     function populateFilters() {
         const lvlSelect = document.getElementById('filter-level');
-        pubData.setup.levels.forEach(l => lvlSelect.add(new Option(l.name, l.name)));
+        (pubData.setup.levels || []).forEach(l => lvlSelect.add(new Option(l.name, l.name)));
 
         const lecSelect = document.getElementById('filter-lecturer');
-        pubData.setup.lecturers.forEach(l => lecSelect.add(new Option(l.name, l.name)));
+        (pubData.setup.lecturers || []).forEach(l => lecSelect.add(new Option(l.name, l.name)));
 
         const roomSelect = document.getElementById('filter-room');
-        pubData.setup.rooms.forEach(r => roomSelect.add(new Option(r.name, r.name)));
+        (pubData.setup.rooms || []).forEach(r => roomSelect.add(new Option(r.name, r.name)));
     }
 
     function renderPublicTimetable() {
