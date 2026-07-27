@@ -5,13 +5,6 @@ header('Cache-Control: no-cache, must-revalidate');
 require_once __DIR__ . '/SystemCore.php';
 $core = new SystemCore();
 
-// Ensure the user is authenticated to access the API
-if (!$core->isLoggedIn()) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'Unauthorized access.']);
-    exit;
-}
-
 // Support both standard POST data and JSON payloads from Fetch API
 $input = json_decode(file_get_contents('php://input'), true);
 if (is_array($input)) {
@@ -20,6 +13,16 @@ if (is_array($input)) {
 
 // Determine the action requested
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+// Define actions that do NOT require admin authentication (Public Access)
+$public_actions = ['fetch_timetable', 'get_setup_data'];
+
+// Ensure the user is authenticated to access protected API actions
+if (!in_array($action, $public_actions) && !$core->isLoggedIn()) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Unauthorized access.']);
+    exit;
+}
 
 // Helper function to send JSON responses
 function sendResponse($success, $data = null, $error = null) {
