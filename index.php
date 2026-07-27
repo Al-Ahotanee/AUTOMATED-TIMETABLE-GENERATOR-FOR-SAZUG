@@ -503,7 +503,9 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
         const fLec = document.getElementById('filter-lecturer').value;
         const fRoom = document.getElementById('filter-room').value;
 
-        let filtered = pubData.timetable;
+        // CRITICAL UPDATE: Only display timetables that have been explicitly 'Published' by the Admin
+        let filtered = pubData.timetable.filter(p => p.status === 'Published');
+        
         if (fLvl !== 'ALL') filtered = filtered.filter(p => p.level_name === fLvl);
         if (fLec !== 'ALL') filtered = filtered.filter(p => p.lecturer_name === fLec);
         if (fRoom !== 'ALL') filtered = filtered.filter(p => p.room_name === fRoom);
@@ -561,7 +563,7 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
             html += `</tr>`;
         });
 
-        tbody.innerHTML = html || '<tr><td colspan="7">No timetable slots configured.</td></tr>';
+        tbody.innerHTML = html || '<tr><td colspan="7" class="py-5 text-muted"><i data-lucide="shield-alert" class="mx-auto mb-2 d-block" style="width:32px; height:32px;"></i> No published timetable available yet. The department is still finalizing the schedule.</td></tr>';
         
         // Re-render lucide icons inside the newly generated HTML
         lucide.createIcons();
