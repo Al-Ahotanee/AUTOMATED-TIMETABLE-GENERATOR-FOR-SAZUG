@@ -681,6 +681,13 @@ if (!isset($core) || !$core->isLoggedIn()) {
         if (allowSat) state.days.push('Saturday');
     }
 
+    // Add this missing function to update dashboard counters
+    function updateDashboardStats() {
+        document.getElementById('stat-courses').innerText = state.courses ? state.courses.length : 0;
+        document.getElementById('stat-lecturers').innerText = state.lecturers ? state.lecturers.length : 0;
+        document.getElementById('stat-rooms').innerText = state.rooms ? state.rooms.length : 0;
+    }
+
     // --- STREAMING_CHUNK: CRUD Operations (Rooms, Lecturers, Courses) ---
 
     // Generic Delete Function
