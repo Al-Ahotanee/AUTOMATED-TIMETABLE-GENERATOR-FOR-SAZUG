@@ -226,7 +226,7 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
             </div>
             <div>
                 <span class="brand-text fs-5">DEPARTMENT OF MATHEMATICAL SCIENCES</span>
-                <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">SAZUG</span>
+                <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">Timetable System</span>
             </div>
         </a>
 
