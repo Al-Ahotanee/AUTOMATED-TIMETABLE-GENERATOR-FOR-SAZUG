@@ -1,4 +1,8 @@
 <?php
+// Ensure absolutely NO HTML or PHP warnings leak into the JSON response
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
 
