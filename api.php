@@ -64,6 +64,7 @@ try {
                 'levels' => $core->getLevels(),
                 'time_slots' => $core->getTimeSlots(),
                 'lecturers' => $core->getLecturers(),
+                'rooms' => $core->getRooms(),
                 'settings' => $core->getSettings()
             ];
             sendResponse(true, $data);
