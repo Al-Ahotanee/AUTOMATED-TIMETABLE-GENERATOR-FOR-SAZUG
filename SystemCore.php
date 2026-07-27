@@ -252,8 +252,7 @@ class SystemCore {
     }
 
     public function processCSVImport($type, $tmpFile) {
-        // Fix for Mac/Excel line-ending bug causing everything to be read as one row
-        ini_set('auto_detect_line_endings', TRUE); 
+        // PHP 8.1+ natively detects line endings, removing deprecated ini_set to prevent HTML warnings
         
         $handle = fopen($tmpFile, 'r');
         if (!$handle) throw new \Exception("Could not open the uploaded CSV file.");
