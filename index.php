@@ -190,6 +190,26 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
             border-top: 1px solid rgba(255, 255, 255, 0.08);
             background: rgba(5, 8, 15, 0.95);
         }
+
+        /* Print & PDF Specific Styles */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-area, #printable-area * { visibility: visible; }
+            #printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+            .d-print-none { display: none !important; }
+            .print-header { display: block !important; }
+            .glass-card-print { background: white !important; color: black !important; border: none; backdrop-filter: none; }
+            .table { border-color: #dee2e6 !important; }
+            .table td, .table th { border-color: #dee2e6 !important; color: #000 !important; background-color: #fff !important; }
+            .time-col { background-color: #f8f9fa !important; }
+        }
+        /* PDF Mode Override */
+        .pdf-mode { background: white !important; color: black !important; padding: 20px; border-radius: 0; }
+        .pdf-mode * { color: black !important; }
+        .pdf-mode .table { border-color: #dee2e6 !important; }
+        .pdf-mode .table th, .pdf-mode .table td { border-color: #dee2e6 !important; background: transparent !important; }
+        .pdf-mode .print-header { display: block !important; }
+        .pdf-mode .badge { border: 1px solid #000; color: #000 !important; background: transparent !important; }
     </style>
 </head>
 <body>
@@ -370,59 +390,59 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
 
 <section id="schedule-preview" class="py-5">
     <div class="container">
-        <div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between mb-4 d-print-none">
             <div>
-                <h2 class="fw-bold mb-1">Live Timetable Structure</h2>
-                <p class="text-white-50 m-0">Sample representation of generated schedule slots across levels.</p>
+                <h2 class="fw-bold mb-1">Live Timetable Explorer</h2>
+                <p class="text-white-50 m-0">Filter, view, download, and print the official generated schedule.</p>
             </div>
-            <a href="login.php" class="btn btn-outline-glass btn-sm">
-                <i class="bi bi-gear me-1"></i> Manage Full Matrix
-            </a>
+            <div class="d-flex gap-2 mt-3 mt-md-0">
+                <button class="btn btn-outline-glass" onclick="window.print()"><i class="bi bi-printer me-1"></i> Print</button>
+                <button class="btn btn-glow" onclick="downloadPDF()"><i class="bi bi-file-earmark-pdf me-1"></i> Download PDF</button>
+            </div>
         </div>
 
-        <div class="glass-card p-3 table-responsive">
-            <table class="table table-dark table-hover mini-grid-table m-0">
+        <!-- Filter Controls -->
+        <div class="glass-card p-3 mb-4 d-print-none">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label text-white-50 small mb-1">Academic Level</label>
+                    <select id="filter-level" class="form-select bg-dark text-white border-secondary" onchange="renderPublicTimetable()">
+                        <option value="ALL">All Levels</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-white-50 small mb-1">Lecturer / Instructor</label>
+                    <select id="filter-lecturer" class="form-select bg-dark text-white border-secondary" onchange="renderPublicTimetable()">
+                        <option value="ALL">All Lecturers</option>
+                    </select>
+                </div>
+                 <div class="col-md-4">
+                    <label class="form-label text-white-50 small mb-1">Room / Laboratory</label>
+                    <select id="filter-room" class="form-select bg-dark text-white border-secondary" onchange="renderPublicTimetable()">
+                        <option value="ALL">All Rooms</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Printable Data Area -->
+        <div id="printable-area" class="glass-card glass-card-print p-3 table-responsive">
+            <!-- Hidden by default, shows up in Print/PDF -->
+            <div class="text-center mb-4 d-none print-header">
+                <h3 class="fw-bold mb-1">Department of Mathematical Sciences</h3>
+                <h5 class="mb-3">Official Academic Timetable</h5>
+                <p id="print-meta" class="small"></p>
+            </div>
+            
+            <table class="table table-dark table-bordered border-secondary table-hover mini-grid-table m-0 text-center align-middle" id="public-timetable" style="min-width: 1000px;">
                 <thead>
-                    <tr>
-                        <th>Time Slot</th>
-                        <th>Monday</th>
-                        <th>Tuesday</th>
-                        <th>Wednesday</th>
-                        <th>Thursday</th>
-                        <th>Friday</th>
+                    <tr id="public-grid-header">
+                        <th class="bg-secondary text-white">Time / Day</th>
+                        <!-- Generated by JS -->
                     </tr>
                 </thead>
-                <tbody>
-                    <tr>
-                        <td class="fw-semibold text-primary">08:00 - 10:00</td>
-                        <td><span class="tag-pill tag-blue">MTH101 (100L)</span><br><small class="text-white-50">Hall A • Dr. Smith</small></td>
-                        <td><span class="tag-pill tag-purple">CSC201 (200L)</span><br><small class="text-white-50">Lab 1 • Prof. Alan</small></td>
-                        <td>---</td>
-                        <td><span class="tag-pill tag-blue">MTH301 (300L)</span><br><small class="text-white-50">Hall B • Dr. Jane</small></td>
-                        <td>---</td>
-                    </tr>
-                    <tr>
-                        <td class="fw-semibold text-primary">10:00 - 12:00</td>
-                        <td>---</td>
-                        <td><span class="tag-pill tag-amber">STA102 (100L)</span><br><small class="text-white-50">Hall A • Dr. Smith</small></td>
-                        <td><span class="tag-pill tag-blue">MTH401 (400L)</span><br><small class="text-white-50">Hall B • Prof. Alan</small></td>
-                        <td>---</td>
-                        <td><span class="tag-pill tag-purple">CSC102 (100L)</span><br><small class="text-white-50">Lab 1 • Tech Team</small></td>
-                    </tr>
-                    <tr class="table-active">
-                        <td class="fw-semibold text-warning">13:00 - 14:00</td>
-                        <td colspan="5" class="text-center text-uppercase fw-bold text-white-50 tracking-wider">
-                            <i class="bi bi-cup-hot me-2"></i> University Lunch Break
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="fw-semibold text-primary">14:00 - 16:00</td>
-                        <td><span class="tag-pill tag-purple">CSC305 (300L)</span><br><small class="text-white-50">Lab 1 • Tech Team</small></td>
-                        <td>---</td>
-                        <td><span class="tag-pill tag-blue">MTH202 (200L)</span><br><small class="text-white-50">Hall A • Dr. Jane</small></td>
-                        <td><span class="tag-pill tag-amber">STA401 (400L)</span><br><small class="text-white-50">Hall B • Dr. Smith</small></td>
-                        <td>---</td>
-                    </tr>
+                <tbody id="public-grid-body">
+                    <tr><td colspan="7" class="py-5 text-white-50">Connecting to scheduling engine...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -468,6 +488,149 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
 
 <!-- Bootstrap JS Bundle -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- HTML2PDF Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+    // --- Public Timetable Viewer Logic ---
+    let pubData = {
+        timetable: [],
+        setup: { time_slots: [], levels: [], lecturers: [], rooms: [], settings: {} },
+        days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    };
+
+    async function loadPublicData() {
+        try {
+            // Fetch configuration and entities
+            const setupRes = await fetch('api.php?action=get_setup_data');
+            const setupJson = await setupRes.json();
+            if(setupJson.success) pubData.setup = setupJson.data;
+
+            // Update days array if Saturdays are allowed
+            if (pubData.setup.settings.allow_saturdays === 'true') {
+                pubData.days.push('Saturday');
+            }
+
+            // Fetch the actual placed courses
+            const timeRes = await fetch('api.php?action=fetch_timetable');
+            const timeJson = await timeRes.json();
+            if(timeJson.success) pubData.timetable = timeJson.data;
+
+            populateFilters();
+            renderPublicTimetable();
+        } catch (error) {
+            console.error("Error loading public data:", error);
+            document.getElementById('public-grid-body').innerHTML = '<tr><td colspan="7" class="text-danger py-4">Unable to load timetable data.</td></tr>';
+        }
+    }
+
+    function populateFilters() {
+        const lvlSelect = document.getElementById('filter-level');
+        pubData.setup.levels.forEach(l => lvlSelect.add(new Option(l.name, l.name)));
+
+        const lecSelect = document.getElementById('filter-lecturer');
+        pubData.setup.lecturers.forEach(l => lecSelect.add(new Option(l.name, l.name)));
+
+        const roomSelect = document.getElementById('filter-room');
+        pubData.setup.rooms.forEach(r => roomSelect.add(new Option(r.name, r.name)));
+    }
+
+    function renderPublicTimetable() {
+        const fLvl = document.getElementById('filter-level').value;
+        const fLec = document.getElementById('filter-lecturer').value;
+        const fRoom = document.getElementById('filter-room').value;
+
+        // Apply filters to placements
+        let filtered = pubData.timetable;
+        if (fLvl !== 'ALL') filtered = filtered.filter(p => p.level_name === fLvl);
+        if (fLec !== 'ALL') filtered = filtered.filter(p => p.lecturer_name === fLec);
+        if (fRoom !== 'ALL') filtered = filtered.filter(p => p.room_name === fRoom);
+
+        // Update Meta string for printing
+        let metaArr = [];
+        if (fLvl !== 'ALL') metaArr.push(`Level: ${fLvl}`);
+        if (fLec !== 'ALL') metaArr.push(`Lecturer: ${fLec}`);
+        if (fRoom !== 'ALL') metaArr.push(`Room: ${fRoom}`);
+        document.getElementById('print-meta').innerText = metaArr.length ? 'Filtered by - ' + metaArr.join(' | ') : 'All Levels, Lecturers, and Rooms';
+
+        // Render Header
+        const thead = document.getElementById('public-grid-header');
+        thead.innerHTML = '<th class="bg-dark text-white time-col" style="width:120px;">Time</th>' + 
+            pubData.days.map(d => `<th class="bg-dark text-white">${d}</th>`).join('');
+
+        // Render Body
+        const tbody = document.getElementById('public-grid-body');
+        let html = '';
+
+        pubData.setup.time_slots.forEach(slot => {
+            const tStart = slot.start_time.substring(0,5);
+            const tEnd = slot.end_time.substring(0,5);
+
+            if (slot.is_break === true || slot.is_break === 'true') {
+                html += `<tr><td class="fw-bold time-col text-white-50">${tStart} - ${tEnd}</td>
+                         <td colspan="${pubData.days.length}" class="text-uppercase fw-bold text-white-50" style="letter-spacing: 2px;">
+                            <i class="bi bi-cup-hot me-1"></i> Break
+                         </td></tr>`;
+                return;
+            }
+
+            html += `<tr><td class="fw-bold time-col text-primary">${tStart} - ${tEnd}</td>`;
+            
+            pubData.days.forEach(day => {
+                const cellPlacements = filtered.filter(p => p.time_slot_id == slot.id && p.day_of_week === day);
+                
+                html += `<td>`;
+                if (cellPlacements.length > 0) {
+                    html += `<div class="d-flex flex-column gap-2">`;
+                    cellPlacements.forEach(p => {
+                        html += `
+                        <div class="p-2 rounded border border-secondary" style="background: rgba(255,255,255,0.02);">
+                            <div class="fw-bold text-info">${p.course_code}</div>
+                            <div style="font-size: 0.75rem;"><span class="badge bg-secondary opacity-75">${p.level_name}</span></div>
+                            <div class="text-white-50 mt-1" style="font-size: 0.75rem;"><i class="bi bi-geo-alt"></i> ${p.room_name}</div>
+                            ${p.lecturer_name ? `<div class="text-white-50" style="font-size: 0.75rem;"><i class="bi bi-person"></i> ${p.lecturer_name}</div>` : ''}
+                        </div>`;
+                    });
+                    html += `</div>`;
+                } else {
+                    html += `<span class="text-white-50 opacity-25">-</span>`;
+                }
+                html += `</td>`;
+            });
+            html += `</tr>`;
+        });
+
+        tbody.innerHTML = html || '<tr><td colspan="7">No timetable slots configured.</td></tr>';
+    }
+
+    // PDF Generation Wrapper
+    function downloadPDF() {
+        const element = document.getElementById('printable-area');
+        // Add class to format it nicely for a white PDF background
+        element.classList.add('pdf-mode');
+        
+        // Remove Bootstrap dark table classes temporarily
+        const table = document.getElementById('public-timetable');
+        table.classList.remove('table-dark');
+        
+        const opt = {
+            margin:       0.3,
+            filename:     'Sazug_Timetable.pdf',
+            image:        { type: 'jpeg', quality: 1 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
+        };
+
+        // Generate and then clean up classes
+        html2pdf().set(opt).from(element).save().then(() => {
+            element.classList.remove('pdf-mode');
+            table.classList.add('table-dark');
+        });
+    }
+
+    // Init on load
+    document.addEventListener("DOMContentLoaded", loadPublicData);
+</script>
 
 </body>
 </html>
