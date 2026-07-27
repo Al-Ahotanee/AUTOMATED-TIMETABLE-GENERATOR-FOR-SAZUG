@@ -167,6 +167,53 @@ try {
             sendResponse(true);
             break;
 
+        // --- PHASE 2: NEW FEATURES (CSV, Analytics, Drag & Drop, Publish) ---
+        
+        case 'publish_timetable':
+            $core->publishTimetable();
+            sendResponse(true, ['message' => 'Timetable published to public view successfully.']);
+            break;
+
+        case 'update_placement':
+            $id = $_POST['placement_id'] ?? null;
+            $room = $_POST['room_id'] ?? null;
+            $day = $_POST['day_of_week'] ?? null;
+            $slot = $_POST['time_slot_id'] ?? null;
+            
+            if ($id && $room && $day && $slot) {
+                $core->updatePlacement($id, $room, $day, $slot);
+                sendResponse(true);
+            } else {
+                sendResponse(false, null, 'Invalid or missing placement parameters.');
+            }
+            break;
+            
+        case 'get_analytics':
+            sendResponse(true, [
+                'lecturer_workload' => $core->getLecturerWorkload(),
+                'space_utilization' => $core->getSpaceUtilization()
+            ]);
+            break;
+
+        case 'upload_csv':
+            $type = $_POST['import_type'] ?? '';
+            if (!in_array($type, ['rooms', 'lecturers', 'courses'])) {
+                sendResponse(false, null, 'Invalid import type.');
+            }
+            
+            if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
+                $tmpName = $_FILES['file']['tmp_name'];
+                try {
+                    $count = $core->processCSVImport($type, $tmpName);
+                    sendResponse(true, ['message' => "$count $type imported successfully!"]);
+                } catch (\Exception $e) {
+                    sendResponse(false, null, 'Import Error: Make sure CSV format is correct. (' . $e->getMessage() . ')');
+                }
+            } else {
+                sendResponse(false, null, 'File upload failed or no file provided.');
+            }
+            break;
+
         // --- DEFAULT ---
         default:
             sendResponse(false, null, 'Unknown action specified: ' . htmlspecialchars($action));
