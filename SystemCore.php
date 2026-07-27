@@ -58,13 +58,6 @@ class SystemCore {
         return $settings;
     }
 
-    public function getSetting($key) {
-        $stmt = $this->db->prepare("SELECT setting_value FROM settings WHERE setting_key = :key");
-        $stmt->execute(['key' => $key]);
-        $result = $stmt->fetch();
-        return $result ? $result['setting_value'] : null;
-    }
-
     public function updateSetting($key, $value) {
         $stmt = $this->db->prepare("UPDATE settings SET setting_value = :value WHERE setting_key = :key");
         return $stmt->execute(['value' => $value, 'key' => $key]);
@@ -136,49 +129,55 @@ class SystemCore {
         return $stmt->execute(['id' => $id]);
     }
 
-    public function getLecturerUnavailability($lecturer_id) {
-        $stmt = $this->db->prepare("SELECT day_of_week, time_slot_id FROM lecturer_unavailability WHERE lecturer_id = :lecturer_id");
-        $stmt->execute(['lecturer_id' => $lecturer_id]);
-        return $stmt->fetchAll();
-    }
-
-    public function setLecturerUnavailability($lecturer_id, $day_of_week, $time_slot_id) {
-        $stmt = $this->db->prepare("INSERT INTO lecturer_unavailability (lecturer_id, day_of_week, time_slot_id) VALUES (:lid, :day, :tid) ON CONFLICT DO NOTHING");
-        return $stmt->execute(['lid' => $lecturer_id, 'day' => $day_of_week, 'tid' => $time_slot_id]);
-    }
-
-    public function clearLecturerUnavailability($lecturer_id) {
-        $stmt = $this->db->prepare("DELETE FROM lecturer_unavailability WHERE lecturer_id = :lecturer_id");
-        return $stmt->execute(['lecturer_id' => $lecturer_id]);
-    }
-
     /**
-     * COURSES
+     * COURSES (Upgraded for Cross-Disciplinary Tagging)
      */
     public function getCourses() {
+        // Updated to aggregate multiple programs into a single string for the UI
         $query = "
-            SELECT c.*, p.name as program_name, l.name as level_name, lec.name as lecturer_name 
+            SELECT c.*, l.name as level_name, lec.name as lecturer_name, 
+                   STRING_AGG(p.code, ', ') as program_codes
             FROM courses c
-            LEFT JOIN programs p ON c.program_id = p.id
             LEFT JOIN levels l ON c.level_id = l.id
             LEFT JOIN lecturers lec ON c.lecturer_id = lec.id
+            LEFT JOIN course_programs cp ON c.id = cp.course_id
+            LEFT JOIN programs p ON cp.program_id = p.id
+            GROUP BY c.id, l.name, lec.name
             ORDER BY c.code ASC
         ";
         $stmt = $this->db->query($query);
         return $stmt->fetchAll();
     }
 
-    public function addCourse($code, $title, $duration, $is_practical, $students, $program_id, $level_id, $lecturer_id) {
-        $stmt = $this->db->prepare("
-            INSERT INTO courses (code, title, duration_hours, is_practical, students_count, program_id, level_id, lecturer_id) 
-            VALUES (:code, :title, :duration, :is_prac, :students, :pid, :lid, :lecid) RETURNING id
-        ");
-        $stmt->execute([
-            'code' => $code, 'title' => $title, 'duration' => $duration, 
-            'is_prac' => $is_practical ? 'true' : 'false', 'students' => $students, 
-            'pid' => $program_id, 'lid' => $level_id, 'lecid' => $lecturer_id ?: null
-        ]);
-        return $stmt->fetchColumn();
+    public function addCourse($code, $title, $duration, $is_practical, $students, $program_ids, $level_id, $lecturer_id) {
+        $this->db->beginTransaction();
+        try {
+            // 1. Insert Course (program_id removed from base table)
+            $stmt = $this->db->prepare("
+                INSERT INTO courses (code, title, duration_hours, is_practical, students_count, level_id, lecturer_id) 
+                VALUES (:code, :title, :duration, :is_prac, :students, :lid, :lecid) RETURNING id
+            ");
+            $stmt->execute([
+                'code' => $code, 'title' => $title, 'duration' => $duration, 
+                'is_prac' => $is_practical ? 'true' : 'false', 'students' => $students, 
+                'lid' => $level_id, 'lecid' => $lecturer_id ?: null
+            ]);
+            $course_id = $stmt->fetchColumn();
+
+            // 2. Insert Cross-Disciplinary Tags safely (Fallback for Phase 1 API compatibility)
+            if (!is_array($program_ids)) $program_ids = [$program_ids];
+            
+            $stmt_cp = $this->db->prepare("INSERT INTO course_programs (course_id, program_id) VALUES (?, ?)");
+            foreach ($program_ids as $pid) {
+                if ($pid) $stmt_cp->execute([$course_id, $pid]);
+            }
+
+            $this->db->commit();
+            return $course_id;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 
     public function deleteCourse($id) {
@@ -187,11 +186,11 @@ class SystemCore {
     }
 
     /**
-     * TIMETABLE
+     * TIMETABLE & DRAFT MANAGEMENT
      */
-    public function getTimetable() {
+    public function getTimetable($status = null) {
         $query = "
-            SELECT t.id, t.day_of_week, t.time_slot_id, t.is_locked,
+            SELECT t.id, t.day_of_week, t.time_slot_id, t.is_locked, t.status,
                    c.code as course_code, c.title as course_title, c.duration_hours,
                    r.name as room_name, r.capacity as room_capacity,
                    l.name as lecturer_name,
@@ -201,15 +200,38 @@ class SystemCore {
             JOIN rooms r ON t.room_id = r.id
             LEFT JOIN lecturers l ON c.lecturer_id = l.id
             LEFT JOIN levels lev ON c.level_id = lev.id
+            " . ($status ? "WHERE t.status = :status" : "") . "
             ORDER BY t.day_of_week, t.time_slot_id
         ";
-        $stmt = $this->db->query($query);
+        
+        $stmt = $this->db->prepare($query);
+        if ($status) $stmt->execute(['status' => $status]);
+        else $stmt->execute();
+        
         return $stmt->fetchAll();
     }
 
+    public function publishTimetable() {
+        return $this->db->query("UPDATE timetable SET status = 'Published' WHERE status = 'Draft'");
+    }
+
     public function clearUnlockedTimetable() {
-        // Clears generated slots that haven't been manually pinned/locked by the admin
-        return $this->db->query("DELETE FROM timetable WHERE is_locked = false");
+        return $this->db->query("DELETE FROM timetable WHERE is_locked = FALSE");
+    }
+
+    /**
+     * ANALYTICS (Prep for Phase 2/3)
+     */
+    public function getLecturerWorkload() {
+        $query = "
+            SELECT l.name, SUM(c.duration_hours) as total_hours 
+            FROM timetable t
+            JOIN courses c ON t.course_id = c.id
+            JOIN lecturers l ON c.lecturer_id = l.id
+            GROUP BY l.id, l.name
+            ORDER BY total_hours DESC
+        ";
+        return $this->db->query($query)->fetchAll();
     }
 }
 ?>
