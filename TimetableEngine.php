@@ -15,6 +15,8 @@ class TimetableEngine {
     private $lecturerMatrix = [];   
     private $programLevelMatrix = []; // Upgraded: Multi-dimensional collision detection    
     
+    private $dayLoad = []; // NEW: Tracks how busy each day is for intelligent load balancing
+    
     private $placements = [];
 
     public function __construct() {
@@ -69,6 +71,11 @@ class TimetableEngine {
         $stmt->execute();
         if ($stmt->fetchColumn() === 'true') $this->days[] = 'Saturday';
 
+        // Initialize day load tracking
+        foreach ($this->days as $day) {
+            $this->dayLoad[$day] = 0;
+        }
+
         $this->timeSlots = $this->db->query("SELECT * FROM time_slots ORDER BY order_index ASC")->fetchAll();
         $this->rooms = $this->db->query("SELECT * FROM rooms ORDER BY capacity ASC")->fetchAll();
         $this->courses = $this->db->query("SELECT * FROM courses")->fetchAll();
@@ -109,6 +116,9 @@ class TimetableEngine {
             foreach($pids as $pid) {
                 $this->programLevelMatrix[$pid][$slot['level_id']][$day][$tid] = $cid;
             }
+
+            // Record this slot against the day's load
+            $this->dayLoad[$day]++;
         }
     }
 
@@ -117,14 +127,29 @@ class TimetableEngine {
         $students = (int) $course['students_count'];
         $isPractical = filter_var($course['is_practical'], FILTER_VALIDATE_BOOLEAN);
 
-        foreach ($this->days as $day) {
-            foreach ($this->rooms as $room) {
-                if ($room['capacity'] < $students) continue; 
+        // 1. INTELLIGENT LOAD BALANCING: Sort days by least busy first
+        $sortedDays = $this->days;
+        usort($sortedDays, function($a, $b) {
+            return $this->dayLoad[$a] <=> $this->dayLoad[$b];
+        });
 
-                $isLab = in_array($room['room_type'], ['Laboratory', 'Computer Lab']);
-                if ($isPractical && !$isLab) continue;
-                if (!$isPractical && $isLab) continue;
+        // 2. BEST-FIT ROOM ALLOCATION: Filter valid rooms and sort by capacity (smallest valid first)
+        $validRooms = [];
+        foreach ($this->rooms as $room) {
+            if ($room['capacity'] < $students) continue; 
+            $isLab = in_array($room['room_type'], ['Laboratory', 'Computer Lab']);
+            if ($isPractical && !$isLab) continue;
+            if (!$isPractical && $isLab) continue;
+            $validRooms[] = $room;
+        }
+        
+        usort($validRooms, function($a, $b) {
+            return $a['capacity'] <=> $b['capacity'];
+        });
 
+        // 3. ATTEMPT PLACEMENT
+        foreach ($sortedDays as $day) {
+            foreach ($validRooms as $room) {
                 $totalSlots = count($this->timeSlots);
                 for ($startIndex = 0; $startIndex <= $totalSlots - $duration; $startIndex++) {
                     if ($this->canPlaceAt($course, $room, $day, $startIndex, $duration)) {
@@ -196,6 +221,9 @@ class TimetableEngine {
             foreach ($pids as $pid) {
                 $this->programLevelMatrix[$pid][$levelId][$day][$slotId] = $course['id'];
             }
+
+            // Increment load to ensure future courses get pushed to other days!
+            $this->dayLoad[$day]++;
 
             $this->placements[] = [
                 'course_id' => $course['id'],
