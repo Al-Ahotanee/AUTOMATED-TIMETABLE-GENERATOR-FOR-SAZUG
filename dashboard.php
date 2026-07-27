@@ -16,6 +16,8 @@ if (!isset($core) || !$core->isLoggedIn()) {
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -87,6 +89,7 @@ if (!isset($core) || !$core->isLoggedIn()) {
             text-align: center;
             vertical-align: middle;
             border: 1px solid #e9ecef;
+            transition: all 0.2s;
         }
         .timetable-table th {
             background-color: #f1f3f5;
@@ -94,6 +97,14 @@ if (!isset($core) || !$core->isLoggedIn()) {
             color: #495057;
             padding: 1rem;
         }
+        
+        .drop-valid { outline: 1px dashed rgba(25, 135, 84, 0.4); }
+        .drop-invalid { outline: 1px dashed rgba(220, 53, 69, 0.4); opacity: 0.7; }
+        .drag-over-valid { background-color: rgba(25, 135, 84, 0.15) !important; border: 2px dashed #198754 !important; }
+        .drag-over-invalid { background-color: rgba(220, 53, 69, 0.15) !important; border: 2px dashed #dc3545 !important; cursor: not-allowed; }
+        .course-card[draggable="true"] { cursor: grab; }
+        .course-card[draggable="true"]:active { cursor: grabbing; }
+
         .time-col {
             width: 120px;
             background-color: #f8f9fa;
@@ -167,6 +178,12 @@ if (!isset($core) || !$core->isLoggedIn()) {
             </li>
             <li class="nav-item">
                 <a href="#" class="nav-link" data-target="courses"><i class="bi bi-journal-text"></i> Courses</a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link" data-target="import"><i class="bi bi-cloud-arrow-up"></i> Data Import</a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link" data-target="reports"><i class="bi bi-bar-chart-fill"></i> Reports</a>
             </li>
             <li class="nav-item">
                 <a href="#" class="nav-link" data-target="generator"><i class="bi bi-cpu"></i> Generator</a>
@@ -410,8 +427,11 @@ if (!isset($core) || !$core->isLoggedIn()) {
                     <button class="btn btn-outline-danger me-2" onclick="clearTimetable()">
                         <i class="bi bi-trash3"></i> Clear Unlocked
                     </button>
-                    <button class="btn btn-success shadow" onclick="generateTimetable()">
+                    <button class="btn btn-success shadow me-2" onclick="generateTimetable()">
                         <i class="bi bi-cpu"></i> Run Auto-Generator
+                    </button>
+                    <button class="btn btn-warning shadow" onclick="publishTimetable()">
+                        <i class="bi bi-megaphone"></i> Publish to Students
                     </button>
                 </div>
             </div>
@@ -445,6 +465,75 @@ if (!isset($core) || !$core->isLoggedIn()) {
             
             <!-- Result Alert Placeholder -->
             <div id="generation-result" class="mt-3"></div>
+        </div>
+
+        <!-- View: Data Import -->
+        <div id="view-import" class="spa-view">
+            <h2 class="fw-bold mb-4">Bulk Data Import</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 rounded-4">
+                        <div class="card-body p-4">
+                            <h5 class="fw-bold mb-3"><i class="bi bi-filetype-csv text-primary"></i> Upload CSV File</h5>
+                            <p class="text-muted small">Select the entity type and upload a properly formatted CSV to batch insert records.</p>
+                            
+                            <form id="form-csv-import" onsubmit="handleCSVImport(event)">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small">Data Type</label>
+                                    <select name="import_type" class="form-select" required>
+                                        <option value="" disabled selected>Select what you are importing...</option>
+                                        <option value="rooms">Rooms (Name, Capacity, Type)</option>
+                                        <option value="lecturers">Lecturers (Name, Email)</option>
+                                        <option value="courses">Courses (Code, Title, Duration, IsPractical, Students, Level, Lecturer, ProgramCodes)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small">CSV File</label>
+                                    <input type="file" name="file" class="form-control" accept=".csv" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100" id="btn-import">
+                                    <i class="bi bi-upload"></i> Process Import
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-light border-0 rounded-4 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold"><i class="bi bi-info-circle"></i> Formatting Guide</h6>
+                            <ul class="small text-muted mb-0 ps-3 mt-3">
+                                <li class="mb-2"><strong>Rooms:</strong> Headers omitted. Col 1: Name, Col 2: Capacity, Col 3: Type (Lecture Hall/Laboratory).</li>
+                                <li class="mb-2"><strong>Lecturers:</strong> Headers omitted. Col 1: Name, Col 2: Email.</li>
+                                <li><strong>Courses:</strong> Headers omitted. Col 1: Code, Col 2: Title, Col 3: Duration (1-3), Col 4: IsPractical (1 or 0), Col 5: Students, Col 6: Level Name, Col 7: Lecturer Name, Col 8: Program Codes (Comma separated, e.g., 'MTH, CSC').</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Reports -->
+        <div id="view-reports" class="spa-view">
+            <h2 class="fw-bold mb-4">Analytics & Utilization</h2>
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 rounded-4 h-100">
+                        <div class="card-body">
+                            <h5 class="fw-bold mb-4">Lecturer Workload (Hours/Week)</h5>
+                            <canvas id="chart-workload"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 rounded-4 h-100">
+                        <div class="card-body">
+                            <h5 class="fw-bold mb-4">Space Utilization (Scheduled Slots)</h5>
+                            <canvas id="chart-utilization"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </main>
@@ -549,12 +638,7 @@ if (!isset($core) || !$core->isLoggedIn()) {
         if (viewId === 'lecturers') loadLecturers();
         if (viewId === 'courses') loadCourses();
         if (viewId === 'generator') loadTimetable();
-    }
-
-    function updateDashboardStats() {
-        document.getElementById('stat-courses').innerText = state.courses.length;
-        document.getElementById('stat-lecturers').innerText = state.lecturers.length;
-        document.getElementById('stat-rooms').innerText = state.rooms.length;
+        if (viewId === 'reports') loadAnalytics();
     }
 
     // --- STREAMING_CHUNK: Data Initialization (App Load) ---
@@ -727,6 +811,16 @@ if (!isset($core) || !$core->isLoggedIn()) {
         }
     }
 
+    async function publishTimetable() {
+        if(confirm("Are you sure you want to publish the current draft? This will make it visible on the public student portal.")) {
+            const result = await apiCall('publish_timetable', { trigger: true });
+            if (result) {
+                showToast(result.message, 'success');
+                loadTimetable();
+            }
+        }
+    }
+
     async function generateTimetable() {
         document.getElementById('generation-result').innerHTML = '<div class="alert alert-info border-0 shadow-sm"><i class="bi bi-hourglass-split"></i> Engine is calculating optimal constraints...</div>';
         
@@ -769,13 +863,17 @@ if (!isset($core) || !$core->isLoggedIn()) {
         // Filter timetable placements
         let placements = state.timetable;
         if (filterLevelId !== 'ALL') {
-            // Level filtering requires matching level names or IDs. Our view returns level_name.
-            // Let's map ID to Name from setup
             const lvl = state.setup.levels.find(l => l.id == filterLevelId);
             if (lvl) {
                 placements = placements.filter(p => p.level_name === lvl.name);
             }
         }
+        
+        // Update Grid Status Badge
+        const hasDrafts = placements.some(p => p.status === 'Draft');
+        document.getElementById('grid-status-text').innerHTML = hasDrafts ? 
+            '<span class="badge bg-warning text-dark"><i class="bi bi-pencil-square"></i> Unpublished Drafts Exist</span>' : 
+            '<span class="badge bg-success"><i class="bi bi-check-circle"></i> All Visible Placements Published</span>';
 
         // Build Header
         const headerRow = document.getElementById('grid-days-header');
@@ -803,16 +901,24 @@ if (!isset($core) || !$core->isLoggedIn()) {
             
             // Loop through each active day
             state.days.forEach(day => {
-                // Find courses scheduled here
                 const cellPlacements = placements.filter(p => p.time_slot_id == slot.id && p.day_of_week === day);
                 
-                html += `<td class="slot-cell">`;
+                // Add Drag & Drop Attributes to the cell dropzone
+                html += `<td class="slot-cell" data-slot-id="${slot.id}" data-day="${day}" 
+                             ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" 
+                             ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, ${slot.id}, '${day}')">`;
+                             
                 if (cellPlacements.length > 0) {
                     html += `<div class="d-flex flex-column gap-1 h-100">`;
                     cellPlacements.forEach(p => {
-                        const isPrac = (p.room_name && (p.room_name.toLowerCase().includes('lab') || p.room_capacity < 60)); // Basic inferring for UI style
+                        const isPrac = (p.room_name && (p.room_name.toLowerCase().includes('lab') || p.room_capacity < 60)); 
+                        
+                        // Inject HTML5 Draggable attributes to the Course Card
                         html += `
-                        <div class="course-card ${isPrac ? 'practical' : ''}">
+                        <div class="course-card ${isPrac ? 'practical' : ''} ${p.status === 'Draft' ? 'border-warning border-2 border-start' : ''}"
+                             draggable="true" 
+                             ondragstart="handleDragStart(event, ${p.id}, '${p.room_name}', '${p.lecturer_name || ''}')" 
+                             ondragend="handleDragEnd(event)">
                             <div class="fw-bold text-dark d-flex justify-content-between">
                                 <span>${p.course_code}</span>
                                 <span class="badge text-bg-secondary" style="font-size:0.6rem">${p.level_name}</span>
@@ -829,6 +935,177 @@ if (!isset($core) || !$core->isLoggedIn()) {
         });
 
         tbody.innerHTML = html;
+    }
+
+    // --- STREAMING_CHUNK: Interactive Drag & Drop Logic ---
+    let draggedItem = null;
+
+    function handleDragStart(e, placementId, roomName, lecturerName) {
+        // Find Room ID from Name
+        const room = state.setup.rooms.find(r => r.name === roomName);
+        
+        draggedItem = { 
+            id: placementId, 
+            roomId: room ? room.id : null,
+            roomName: roomName,
+            lecturerName: lecturerName
+        };
+        
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => e.target.classList.add('opacity-50'), 0);
+
+        // Smart Validation: Highlight all cells based on constraint logic
+        document.querySelectorAll('.slot-cell').forEach(cell => {
+            const slotId = cell.getAttribute('data-slot-id');
+            const day = cell.getAttribute('data-day');
+            
+            let conflict = false;
+            // Check if room or lecturer is already active in this slot/day (excluding self)
+            state.timetable.forEach(p => {
+                if (p.time_slot_id == slotId && p.day_of_week === day && p.id != placementId) {
+                    if (p.room_name === roomName) conflict = true;
+                    if (lecturerName && p.lecturer_name === lecturerName) conflict = true;
+                }
+            });
+
+            if (conflict) {
+                cell.classList.add('drop-invalid');
+            } else {
+                cell.classList.add('drop-valid');
+            }
+        });
+    }
+
+    function handleDragEnd(e) {
+        e.target.classList.remove('opacity-50');
+        // Clean up UI highlights
+        document.querySelectorAll('.slot-cell').forEach(cell => {
+            cell.classList.remove('drop-valid', 'drop-invalid', 'drag-over-valid', 'drag-over-invalid');
+        });
+        draggedItem = null;
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    function handleDragEnter(e) {
+        e.preventDefault();
+        if (e.currentTarget.classList.contains('drop-invalid')) {
+            e.currentTarget.classList.add('drag-over-invalid');
+        } else {
+            e.currentTarget.classList.add('drag-over-valid');
+        }
+    }
+
+    function handleDragLeave(e) {
+        e.currentTarget.classList.remove('drag-over-valid', 'drag-over-invalid');
+    }
+
+    async function handleDrop(e, slotId, day) {
+        e.stopPropagation();
+        e.currentTarget.classList.remove('drag-over-valid', 'drag-over-invalid');
+        
+        if (!draggedItem || !draggedItem.roomId) return;
+        
+        if (e.currentTarget.classList.contains('drop-invalid')) {
+            showToast('Conflict detected! Room or Lecturer already booked in this slot.', 'danger');
+            return;
+        }
+
+        // Send valid drag-and-drop placement update to backend
+        const result = await apiCall('update_placement', {
+            placement_id: draggedItem.id,
+            room_id: draggedItem.roomId,
+            day_of_week: day,
+            time_slot_id: slotId
+        });
+        
+        if(result) {
+            showToast('Schedule override successful.', 'success');
+            loadTimetable(); // Refresh the grid
+        }
+    }
+
+    // --- STREAMING_CHUNK: CSV Import & Analytics ---
+    async function handleCSVImport(e) {
+        e.preventDefault();
+        const form = e.target;
+        const btn = document.getElementById('btn-import');
+        
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Processing...';
+        
+        const formData = new FormData(form);
+        
+        const result = await apiCall('upload_csv', formData);
+        
+        if (result) {
+            showToast(result.message, 'success');
+            form.reset();
+            // Refresh underlying data just in case
+            initializeApp(); 
+        }
+        
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-upload"></i> Process Import';
+    }
+
+    let chartWorkload = null;
+    let chartUtilization = null;
+
+    async function loadAnalytics() {
+        const data = await apiCall('get_analytics');
+        if (!data) return;
+
+        // 1. Render Lecturer Workload Chart
+        const wlCtx = document.getElementById('chart-workload');
+        if (chartWorkload) chartWorkload.destroy(); // Destroy previous instance to avoid overlapping glitches
+        
+        chartWorkload = new Chart(wlCtx, {
+            type: 'bar',
+            data: {
+                labels: data.lecturer_workload.map(item => item.name),
+                datasets: [{
+                    label: 'Total Teaching Hours',
+                    data: data.lecturer_workload.map(item => item.total_hours),
+                    backgroundColor: 'rgba(13, 110, 253, 0.7)',
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        // 2. Render Space Utilization Chart
+        const utCtx = document.getElementById('chart-utilization');
+        if (chartUtilization) chartUtilization.destroy();
+
+        chartUtilization = new Chart(utCtx, {
+            type: 'bar',
+            data: {
+                labels: data.space_utilization.map(item => item.name),
+                datasets: [{
+                    label: 'Scheduled Slots',
+                    data: data.space_utilization.map(item => item.used_slots),
+                    backgroundColor: 'rgba(217, 70, 239, 0.7)', // Magenta accent to match theme
+                    borderColor: 'rgba(217, 70, 239, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                indexAxis: 'y', // Makes this a horizontal bar chart for better readability with long room names
+                scales: { x: { beginAtZero: true } }
+            }
+        });
     }
 
     // --- Boot up the app on load ---
