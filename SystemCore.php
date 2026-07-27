@@ -233,5 +233,91 @@ class SystemCore {
         ";
         return $this->db->query($query)->fetchAll();
     }
+
+    public function getSpaceUtilization() {
+        $query = "
+            SELECT r.name, COUNT(t.id) as used_slots
+            FROM rooms r
+            LEFT JOIN timetable t ON r.id = t.room_id
+            GROUP BY r.id, r.name
+            ORDER BY used_slots DESC
+        ";
+        return $this->db->query($query)->fetchAll();
+    }
+
+    /**
+     * DRAG-AND-DROP OVERRIDE
+     */
+    public function updatePlacement($id, $room_id, $day_of_week, $time_slot_id) {
+        $stmt = $this->db->prepare("UPDATE timetable SET room_id = :rid, day_of_week = :day, time_slot_id = :tid WHERE id = :id");
+        return $stmt->execute(['rid' => $room_id, 'day' => $day_of_week, 'tid' => $time_slot_id, 'id' => $id]);
+    }
+
+    /**
+     * BULK CSV IMPORT ENGINE
+     */
+    private function findId($table, $column, $value) {
+        if (!$value) return null;
+        $stmt = $this->db->prepare("SELECT id FROM $table WHERE $column = ? LIMIT 1");
+        $stmt->execute([$value]);
+        return $stmt->fetchColumn();
+    }
+
+    public function processCSVImport($type, $tmpFile) {
+        $handle = fopen($tmpFile, 'r');
+        if (!$handle) throw new \Exception("Could not read CSV file.");
+        
+        fgetcsv($handle); // Skip header row
+        $successCount = 0;
+
+        $this->db->beginTransaction();
+        try {
+            while (($data = fgetcsv($handle)) !== FALSE) {
+                if (empty(array_filter($data))) continue; // Skip empty rows
+
+                if ($type === 'rooms' && count($data) >= 3) {
+                    // Format: Name, Capacity, Type
+                    $this->addRoom(trim($data[0]), (int)$data[1], trim($data[2]));
+                    $successCount++;
+                } 
+                elseif ($type === 'lecturers' && count($data) >= 1) {
+                    // Format: Name, Email
+                    $this->addLecturer(trim($data[0]), trim($data[1] ?? ''));
+                    $successCount++;
+                }
+                elseif ($type === 'courses' && count($data) >= 6) {
+                    // Format: Code, Title, Duration, IsPractical(1/0), Students, LevelName, LecturerName, ProgramCodes(comma separated)
+                    $code = trim($data[0]);
+                    $title = trim($data[1]);
+                    $dur = (int)$data[2];
+                    $prac = (int)$data[3] === 1;
+                    $stu = (int)$data[4];
+                    
+                    // Smart Lookups
+                    $lvlId = $this->findId('levels', 'name', trim($data[5]));
+                    $lecId = $this->findId('lecturers', 'name', trim($data[6] ?? ''));
+                    
+                    $progCodes = explode(',', trim($data[7] ?? ''));
+                    $progIds = [];
+                    foreach ($progCodes as $pcode) {
+                        $pid = $this->findId('programs', 'code', trim($pcode));
+                        if ($pid) $progIds[] = $pid;
+                    }
+
+                    if ($lvlId) {
+                        $this->addCourse($code, $title, $dur, $prac, $stu, $progIds, $lvlId, $lecId);
+                        $successCount++;
+                    }
+                }
+            }
+            $this->db->commit();
+            fclose($handle);
+            return $successCount;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            fclose($handle);
+            throw $e;
+        }
+    }
 }
 ?>
