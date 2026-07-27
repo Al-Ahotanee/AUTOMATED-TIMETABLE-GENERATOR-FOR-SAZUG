@@ -225,8 +225,8 @@ if (isset($_GET['view']) && $_GET['view'] === 'dashboard') {
                 <i data-lucide="calendar-days"></i>
             </div>
             <div>
-                <span class="brand-text fs-5">SAZUG</span>
-                <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">MATH SCI</span>
+                <span class="brand-text fs-5">DEPARTMENT OF MATHEMATICAL SCIENCES</span>
+                <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">SAZUG</span>
             </div>
         </a>
 
