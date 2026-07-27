@@ -1,1 +1,6 @@
-Use the official PHP image with ApacheFROM php:8.2-apacheInstall PostgreSQL extensions for PHPRUN apt-get update && apt-get install -y libpq-dev && docker-php-ext-install pdo pdo_pgsqlCopy all our PHP files into the Apache web root directoryCOPY . /var/www/html/Set the correct permissionsRUN chown -R www-data:www-data /var/www/html
+FROM php:8.2-apache
+RUN apt-get update
+RUN apt-get install -y libpq-dev
+RUN docker-php-ext-install pdo pdo_pgsql
+COPY . /var/www/html/
+RUN chown -R www-data:www-data /var/www/html
