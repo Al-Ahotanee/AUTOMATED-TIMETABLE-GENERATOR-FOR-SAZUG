@@ -4,7 +4,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Require the database configuration
 require_once __DIR__ . '/config.php';
 
 class SystemCore {
@@ -130,10 +129,9 @@ class SystemCore {
     }
 
     /**
-     * COURSES (Upgraded for Cross-Disciplinary Tagging)
+     * COURSES
      */
     public function getCourses() {
-        // Updated to aggregate multiple programs into a single string for the UI
         $query = "
             SELECT c.*, l.name as level_name, lec.name as lecturer_name, 
                    STRING_AGG(p.code, ', ') as program_codes
@@ -152,7 +150,6 @@ class SystemCore {
     public function addCourse($code, $title, $duration, $is_practical, $students, $program_ids, $level_id, $lecturer_id) {
         $this->db->beginTransaction();
         try {
-            // 1. Insert Course (program_id removed from base table)
             $stmt = $this->db->prepare("
                 INSERT INTO courses (code, title, duration_hours, is_practical, students_count, level_id, lecturer_id) 
                 VALUES (:code, :title, :duration, :is_prac, :students, :lid, :lecid) RETURNING id
@@ -164,14 +161,11 @@ class SystemCore {
             ]);
             $course_id = $stmt->fetchColumn();
 
-            // 2. Insert Cross-Disciplinary Tags safely (Fallback for Phase 1 API compatibility)
             if (!is_array($program_ids)) $program_ids = [$program_ids];
-            
             $stmt_cp = $this->db->prepare("INSERT INTO course_programs (course_id, program_id) VALUES (?, ?)");
             foreach ($program_ids as $pid) {
                 if ($pid) $stmt_cp->execute([$course_id, $pid]);
             }
-
             $this->db->commit();
             return $course_id;
         } catch (\Exception $e) {
@@ -203,7 +197,6 @@ class SystemCore {
             " . ($status ? "WHERE t.status = :status" : "") . "
             ORDER BY t.day_of_week, t.time_slot_id
         ";
-        
         $stmt = $this->db->prepare($query);
         if ($status) $stmt->execute(['status' => $status]);
         else $stmt->execute();
@@ -219,9 +212,6 @@ class SystemCore {
         return $this->db->query("DELETE FROM timetable WHERE is_locked = FALSE");
     }
 
-    /**
-     * ANALYTICS (Prep for Phase 2/3)
-     */
     public function getLecturerWorkload() {
         $query = "
             SELECT l.name, SUM(c.duration_hours) as total_hours 
@@ -245,66 +235,83 @@ class SystemCore {
         return $this->db->query($query)->fetchAll();
     }
 
-    /**
-     * DRAG-AND-DROP OVERRIDE
-     */
     public function updatePlacement($id, $room_id, $day_of_week, $time_slot_id) {
         $stmt = $this->db->prepare("UPDATE timetable SET room_id = :rid, day_of_week = :day, time_slot_id = :tid WHERE id = :id");
         return $stmt->execute(['rid' => $room_id, 'day' => $day_of_week, 'tid' => $time_slot_id, 'id' => $id]);
     }
 
     /**
-     * BULK CSV IMPORT ENGINE
+     * BULK CSV IMPORT ENGINE (Upgraded for robustness and explicit errors)
      */
     private function findId($table, $column, $value) {
         if (!$value) return null;
-        $stmt = $this->db->prepare("SELECT id FROM $table WHERE $column = ? LIMIT 1");
-        $stmt->execute([$value]);
+        // Upgraded to ILIKE for case-insensitive matching
+        $stmt = $this->db->prepare("SELECT id FROM $table WHERE $column ILIKE ? LIMIT 1");
+        $stmt->execute([trim($value)]);
         return $stmt->fetchColumn();
     }
 
     public function processCSVImport($type, $tmpFile) {
+        // Fix for Mac/Excel line-ending bug causing everything to be read as one row
+        ini_set('auto_detect_line_endings', TRUE); 
+        
         $handle = fopen($tmpFile, 'r');
-        if (!$handle) throw new \Exception("Could not read CSV file.");
+        if (!$handle) throw new \Exception("Could not open the uploaded CSV file.");
         
         fgetcsv($handle); // Skip header row
         $successCount = 0;
+        $rowNum = 1;
 
         $this->db->beginTransaction();
         try {
             while (($data = fgetcsv($handle)) !== FALSE) {
-                if (empty(array_filter($data))) continue; // Skip empty rows
+                $rowNum++;
+                // Check if row is empty or parsed weirdly (e.g., semicolons instead of commas)
+                if (empty(array_filter($data))) continue; 
+                if (count($data) === 1 && strpos($data[0], ';') !== false) {
+                    throw new \Exception("Delimiter Error: Your CSV is using semicolons instead of commas. Please save as a standard comma-separated CSV.");
+                }
 
-                if ($type === 'rooms' && count($data) >= 3) {
-                    // Format: Name, Capacity, Type
+                if ($type === 'rooms') {
+                    if (count($data) < 3) throw new \Exception("Row $rowNum: Expected at least 3 columns for Rooms (Name, Capacity, Type). Found " . count($data));
                     $this->addRoom(trim($data[0]), (int)$data[1], trim($data[2]));
                     $successCount++;
                 } 
-                elseif ($type === 'lecturers' && count($data) >= 1) {
-                    // Format: Name, Email
+                elseif ($type === 'lecturers') {
+                    if (count($data) < 1) throw new \Exception("Row $rowNum: Expected at least 1 column for Lecturers (Name).");
                     $this->addLecturer(trim($data[0]), trim($data[1] ?? ''));
                     $successCount++;
                 }
-                elseif ($type === 'courses' && count($data) >= 6) {
-                    // Format: Code, Title, Duration, IsPractical(1/0), Students, LevelName, LecturerName, ProgramCodes(comma separated)
+                elseif ($type === 'courses') {
+                    if (count($data) < 8) throw new \Exception("Row $rowNum: Expected 8 columns for Courses. Found " . count($data));
+                    
                     $code = trim($data[0]);
                     $title = trim($data[1]);
                     $dur = (int)$data[2];
                     $prac = (int)$data[3] === 1;
                     $stu = (int)$data[4];
                     
-                    // Smart Lookups
+                    // Smart Lookups with explicit errors if not found
                     $lvlId = $this->findId('levels', 'name', trim($data[5]));
-                    $lecId = $this->findId('lecturers', 'name', trim($data[6] ?? ''));
+                    if (!$lvlId) throw new \Exception("Row $rowNum ($code): Level '" . trim($data[5]) . "' not found in database.");
+
+                    $lecId = null;
+                    if (!empty(trim($data[6]))) {
+                        $lecId = $this->findId('lecturers', 'name', trim($data[6]));
+                        if (!$lecId) throw new \Exception("Row $rowNum ($code): Lecturer '" . trim($data[6]) . "' not found. Make sure you upload Lecturers first.");
+                    }
                     
                     $progCodes = explode(',', trim($data[7] ?? ''));
                     $progIds = [];
                     foreach ($progCodes as $pcode) {
-                        $pid = $this->findId('programs', 'code', trim($pcode));
+                        $pcode = trim($pcode);
+                        if (empty($pcode)) continue;
+                        $pid = $this->findId('programs', 'code', $pcode);
                         if ($pid) $progIds[] = $pid;
+                        else throw new \Exception("Row $rowNum ($code): Program Code '$pcode' not found in database.");
                     }
 
-                    if ($lvlId) {
+                    if (!empty($progIds) && $lvlId) {
                         $this->addCourse($code, $title, $dur, $prac, $stu, $progIds, $lvlId, $lecId);
                         $successCount++;
                     }
